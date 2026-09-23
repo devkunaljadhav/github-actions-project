@@ -2,7 +2,7 @@ name: Java CI/CD Pipeline to Tomcat
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]   # Trigger on push to main branch
 
 jobs:
   build:
@@ -51,19 +51,32 @@ jobs:
           name: myapp
           path: target/*.war
 
-      # 7. SonarQube analysis
+      # 7. Install SonarQube Scanner CLI (PATH fixed with GITHUB_PATH, not export)
+      - name: Install SonarQube Scanner CLI
+        run: |
+          if [ ! -d "$HOME/sonar-scanner-cli" ]; then
+            echo "Downloading SonarQube Scanner CLI..."
+            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.3.0.5189-linux-x64.zip -O /tmp/sonar-scanner.zip
+            unzip -q /tmp/sonar-scanner.zip -d "$HOME"
+            mv "$HOME/sonar-scanner-7.3.0.5189-linux-x64" "$HOME/sonar-scanner-cli"
+          fi
+          echo "$HOME/sonar-scanner-cli/bin" >> "$GITHUB_PATH"
+          "$HOME/sonar-scanner-cli/bin/sonar-scanner" -v
+
+      # 8. SonarQube analysis (CLI scanner, no Maven plugin version issues)
       - name: SonarQube Analysis
         env:
           SONAR_HOST: ${{ secrets.SONAR_HOST }}
-          SONAR_LOGIN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           echo "SonarQube server URL: $SONAR_HOST"
           curl -sf -I "$SONAR_HOST"
-          mvn org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
+          sonar-scanner \
             -Dsonar.projectKey=hotstar \
-            -Dsonar.host.url=$SONAR_HOST \
-            -Dsonar.login=$SONAR_LOGIN \
-            -Dsonar.token=$SONAR_LOGIN
+            -Dsonar.sources=src \
+            -Dsonar.java.binaries=target/classes \
+            -Dsonar.host.url="$SONAR_HOST" \
+            -Dsonar.token="$SONAR_TOKEN"
 
   deploy:
     runs-on: [self-hosted, linux]
@@ -71,13 +84,13 @@ jobs:
     environment: production
 
     steps:
-      # 8. Download WAR artifact
+      # 9. Download WAR artifact
       - name: Download WAR artifact
         uses: actions/download-artifact@v4
         with:
           name: myapp
 
-      # 9. Deploy WAR via Tomcat Manager
+      # 10. Deploy WAR via Tomcat Manager (credentials via -u, not URL)
       - name: Deploy to Tomcat
         env:
           TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
@@ -90,6 +103,6 @@ jobs:
             -u "${TOMCAT_USER}:${TOMCAT_PASSWORD}" \
             "http://${TOMCAT_HOST}/manager/text/deploy?path=/myapp&update=true"
 
-      # 10. Verify deployment
+      # 11. Verify deployment
       - name: Verify deployment
         run: curl -sf -I "http://${{ secrets.TOMCAT_HOST }}/myapp"
