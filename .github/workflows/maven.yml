@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, linux]
+    environment: production
 
     steps:
       # 1. Checkout code
