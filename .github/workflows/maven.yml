@@ -1,4 +1,3 @@
-
 name: Java CI/CD Pipeline to Tomcat
 
 on:
@@ -8,7 +7,6 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, linux]
-        environment: production
 
     steps:
       # 1. Checkout code
@@ -87,7 +85,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: myapp
-          
+
       # 8. Deploy WAR via Tomcat Manager
       - name: Deploy to Tomcat
         run: |
