@@ -2,12 +2,13 @@ name: Java CI/CD Pipeline to Tomcat
 
 on:
   push:
-    branches: [ main ]   # Trigger on push to main branch
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: [self-hosted, linux]
-    environment: production
+    # environment: production  <-- REMOVE this line now that Sonar secrets
+    #                               are repo-level (see note below)
 
     steps:
       # 1. Checkout code
@@ -31,12 +32,12 @@ jobs:
             echo "Maven is already installed"
           fi
           mvn -version
+
       # 4. Cache Maven dependencies
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.m2/repository
+          path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
@@ -45,56 +46,51 @@ jobs:
       - name: Build with Maven
         run: mvn clean package -DskipTests
 
-      # 6. Upload WAR as artifact (optional, for later jobs)
+      # 6. Upload WAR as artifact
       - name: Upload WAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: myapp
           path: target/*.war
-      # 6. Install SonarQube Scanner CLI
-      - name: Install SonarQube Scanner CLI
-        run: |
-          if [ ! -d "$HOME/sonar-scanner-cli" ]; then
-            echo "Downloading SonarQube Scanner CLI..."
-            wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.3.0.5189-linux-x64.zip -O /tmp/sonar-scanner.zip
-            unzip /tmp/sonar-scanner.zip -d $HOME
-            mv $HOME/sonar-scanner-7.3.0.5189-linux-x64 $HOME/sonar-scanner-cli
-          fi
-          export PATH=$HOME/sonar-scanner-cli/bin:$PATH
-          sonar-scanner -v
-      # 7. SonarQube analysis
+
+      # 7. SonarQube analysis — pinned plugin version, no separate CLI install needed
       - name: SonarQube Analysis
         env:
           SONAR_HOST: ${{ secrets.SONAR_HOST }}
           SONAR_LOGIN: ${{ secrets.SONAR_TOKEN }}
         run: |
           echo "SonarQube server URL: $SONAR_HOST"
-          curl -I $SONAR_HOST
-          mvn sonar:sonar \
+          curl -sf -I "$SONAR_HOST"
+          mvn org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
             -Dsonar.projectKey=hotstar \
             -Dsonar.host.url=$SONAR_HOST \
-            -Dsonar.login=$SONAR_LOGIN
+            -Dsonar.token=$SONAR_LOGIN
 
   deploy:
-    runs-on: ubuntu-latest
-    needs: build
+    runs-on: [self-hosted, linux]   # <-- CHANGED from ubuntu-latest — confirm this
+    needs: build                    #     matches wherever Tomcat is actually reachable from
     environment: production
 
     steps:
-      # 7. Download WAR artifact
+      # 8. Download WAR artifact
       - name: Download WAR artifact
         uses: actions/download-artifact@v4
         with:
           name: myapp
 
-      # 8. Deploy WAR via Tomcat Manager
+      # 9. Deploy WAR via Tomcat Manager
       - name: Deploy to Tomcat
+        env:
+          TOMCAT_USER: ${{ secrets.TOMCAT_USER }}
+          TOMCAT_PASSWORD: ${{ secrets.TOMCAT_PASSWORD }}
+          TOMCAT_HOST: ${{ secrets.TOMCAT_HOST }}
         run: |
           WAR_FILE=$(ls *.war)
           echo "Deploying $WAR_FILE to Tomcat..."
-          curl -v --upload-file "$WAR_FILE" \
-            "http://${{ secrets.TOMCAT_USER }}:${{ secrets.TOMCAT_PASSWORD }}@${{ secrets.TOMCAT_HOST }}/manager/text/deploy?path=/myapp&update=true"
-      # 9. Optional: verify deployment
+          curl -v --fail --upload-file "$WAR_FILE" \
+            -u "${TOMCAT_USER}:${TOMCAT_PASSWORD}" \
+            "http://${TOMCAT_HOST}/manager/text/deploy?path=/myapp&update=true"
+
+      # 10. Verify deployment
       - name: Verify deployment
-        run: |
-          curl -I http://${{ secrets.TOMCAT_HOST }}/myapp
+        run: curl -sf -I "http://${{ secrets.TOMCAT_HOST }}/myapp"
