@@ -7,8 +7,6 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, linux]
-    # environment: production  <-- REMOVE this line now that Sonar secrets
-    #                               are repo-level (see note below)
 
     steps:
       # 1. Checkout code
@@ -53,7 +51,7 @@ jobs:
           name: myapp
           path: target/*.war
 
-      # 7. SonarQube analysis — pinned plugin version, no separate CLI install needed
+      # 7. SonarQube analysis
       - name: SonarQube Analysis
         env:
           SONAR_HOST: ${{ secrets.SONAR_HOST }}
@@ -64,11 +62,12 @@ jobs:
           mvn org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
             -Dsonar.projectKey=hotstar \
             -Dsonar.host.url=$SONAR_HOST \
+            -Dsonar.login=$SONAR_LOGIN \
             -Dsonar.token=$SONAR_LOGIN
 
   deploy:
-    runs-on: [self-hosted, linux]   # <-- CHANGED from ubuntu-latest — confirm this
-    needs: build                    #     matches wherever Tomcat is actually reachable from
+    runs-on: [self-hosted, linux]
+    needs: build
     environment: production
 
     steps:
