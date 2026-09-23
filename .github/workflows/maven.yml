@@ -169,4 +169,3 @@ jobs:
 
           curl -f -I \
             "http://${{ secrets.TOMCAT_HOST }}/myapp"
-```
