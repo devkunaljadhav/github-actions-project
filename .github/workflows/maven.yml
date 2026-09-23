@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, linux]
+     environment: production
 
     steps:
       # 1. Checkout code
@@ -68,7 +69,7 @@ jobs:
           SONAR_LOGIN: ${{ secrets.SONAR_TOKEN }}
         run: |
           echo "SonarQube server URL: $SONAR_HOST"
-          curl -I $SONAR_HOST
+          curl -I "$SONAR_HOST"
           mvn sonar:sonar \
             -Dsonar.projectKey=hotstar \
             -Dsonar.host.url=$SONAR_HOST \
