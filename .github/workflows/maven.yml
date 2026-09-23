@@ -1,3 +1,4 @@
+
 name: Java CI/CD Pipeline to Tomcat
 
 on:
@@ -6,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
 
     steps:
       # 1. Checkout code
@@ -20,6 +21,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # 3. Install Maven if missing
+      - name: Ensure Maven is installed
+        run: |
+          if ! command -v mvn &> /dev/null; then
+            echo "Maven not found. Installing..."
+            sudo dnf install -y maven
+          else
+            echo "Maven is already installed"
+          fi
+          mvn -version
+
       # 3. Build with Maven
       - name: Build with Maven
         run: mvn clean package -DskipTests
@@ -32,7 +44,7 @@ jobs:
           path: target/*.war
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs: build
     environment: production
 
@@ -50,5 +62,3 @@ jobs:
           echo "Deploying $WAR_FILE to Tomcat..."
           curl -v --upload-file "$WAR_FILE" \
             "http://${{ secrets.TOMCAT_USER }}:${{ secrets.TOMCAT_PASSWORD }}@${{ secrets.TOMCAT_HOST }}/manager/text/deploy?path=/myapp&update=true"
-
-
