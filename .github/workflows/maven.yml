@@ -2,77 +2,52 @@ name: Java CI/CD Pipeline to Tomcat
 
 on:
   push:
-    branches: [ main ]   # Trigger on push to main branch
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: [self-hosted, linux]
 
+    environment: production
+
+    env:
+      SONAR_HOST: ${{ secrets.SONAR_HOST }}
+      SONAR_LOGIN: ${{ secrets.SONAR_LOGIN }}
+
     steps:
-      # 1. Checkout code
+
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Set up JDK
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      # 3. Install Maven if missing
-      - name: Ensure Maven is installed
-        run: |
-          if ! command -v mvn &> /dev/null; then
-            echo "Maven not found. Installing..."
-            sudo dnf install -y maven
-          else
-            echo "Maven is already installed"
-          fi
-          mvn -version
-      # 4. Cache Maven dependencies
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+      - name: Build
+        run: mvn clean package
 
-      # 5. Build with Maven
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
-
-      # 6. Upload WAR as artifact (optional, for later jobs)
-      - name: Upload WAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: myapp
-          path: target/*.war
-      # 6. Install SonarQube Scanner CLI
-      - name: Install SonarQube Scanner CLI
-        run: |
-          if [ ! -d "$HOME/sonar-scanner-cli" ]; then
-            echo "Downloading SonarQube Scanner CLI..."
-            wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.3.0.5189-linux-x64.zip -O /tmp/sonar-scanner.zip
-            unzip /tmp/sonar-scanner.zip -d $HOME
-            mv $HOME/sonar-scanner-7.3.0.5189-linux-x64 $HOME/sonar-scanner-cli
-          fi
-          export PATH=$HOME/sonar-scanner-cli/bin:$PATH
-          sonar-scanner -v
-      # 7. SonarQube analysis
       - name: SonarQube Analysis
-        env:
-          SONAR_HOST: ${{ secrets.SONAR_HOST }}
-          SONAR_LOGIN: ${{ secrets.SONAR_TOKEN }}
         run: |
           echo "SonarQube server URL: $SONAR_HOST"
-          curl -I $SONAR_HOST
+
+          if [ -z "$SONAR_HOST" ]; then
+            echo "ERROR: SONAR_HOST is empty"
+            exit 1
+          fi
+
+          if [ -z "$SONAR_LOGIN" ]; then
+            echo "ERROR: SONAR_LOGIN is empty"
+            exit 1
+          fi
+
+          curl -I "$SONAR_HOST"
+
           mvn sonar:sonar \
             -Dsonar.projectKey=hotstar \
-            -Dsonar.host.url=$SONAR_HOST \
-            -Dsonar.login=$SONAR_LOGIN
+            -Dsonar.host.url="$SONAR_HOST" \
+            -Dsonar.login="$SONAR_LOGIN"
 
   deploy:
     runs-on: ubuntu-latest
