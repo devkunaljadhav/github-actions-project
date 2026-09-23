@@ -42,11 +42,3 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: myapp
-
-      # 6. Deploy WAR via Tomcat Manager
-      - name: Deploy to Tomcat
-        run: |
-          WAR_FILE=$(ls *.war)
-          echo "Deploying $WAR_FILE to Tomcat..."
-          curl -v --upload-file "$WAR_FILE" \
-            "http://${{ secrets.TOMCAT_USER }}:${{ secrets.TOMCAT_PASSWORD }}@${{ secrets.TOMCAT_HOST }}/manager/text/deploy?path=/myapp&update=true"
